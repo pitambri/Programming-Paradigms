@@ -1,4 +1,4 @@
-const int builtIn_led = 13;  // Led connected to built-in pin
+const int builtIn_led = 13;  // Led connected to built-in pin (for Nano 33 IoT, D13).
 const int sensorPin = 2;     // Signal pin of the PIR motion sensor.
 int state = LOW;             // Variable to store motion detection state.
 int val = 0;                 // Variable to store sensor input value.
@@ -17,7 +17,7 @@ void loop() {
     delay(500);
 
     if (state == LOW) { // Print message only when motion starts
-      Serial.println("Motion detected");
+      Serial.println("Motion detected: YES");
       state = HIGH; // Update state to indicate motion detected
     }
   } 
@@ -26,7 +26,7 @@ void loop() {
     delay(500);
 
     if (state == HIGH) { // Print message only when motion stops
-      Serial.println("The action/motion has stopped");
+      Serial.println("Motion detected: NO");
       state = LOW; // Update state to indicate no motion
     }
   }
