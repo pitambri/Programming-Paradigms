@@ -1,0 +1,30 @@
+const int builtIn_led = 13; // Built-in LED
+const int sensorPin = 2;    // PIR motion sensor pin
+volatile bool motionDetected = false; // Volatile to ensure it's updated in the ISR
+
+void setup() {
+  pinMode(builtIn_led, OUTPUT);
+  pinMode(sensorPin, INPUT);
+
+  Serial.begin(9600);
+
+  // Attach interrupt for the motion sensor pin, trigger on a state change
+  attachInterrupt(digitalPinToInterrupt(sensorPin), handleMotion, CHANGE);
+}
+
+void loop() {
+  if (motionDetected) {
+    Serial.println("Motion detected");
+    digitalWrite(builtIn_led, HIGH);  // Turn on LED
+    delay(500);                        // Brief delay for indication
+  } else {
+    Serial.println("The action/motion has stopped");
+    digitalWrite(builtIn_led, LOW);   // Turn off LED
+    delay(500);                       // Avoid flooding the serial monitor
+  }
+}
+
+// Interrupt service routine (ISR) for motion detection
+void handleMotion() {
+  motionDetected = digitalRead(sensorPin) == HIGH;
+}
