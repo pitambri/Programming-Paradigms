@@ -1,0 +1,130 @@
+#include <Wire.h>
+#include <BH1750.h>
+#include <PinChangeInterrupt.h>
+
+// Pin Assignments
+#define MOTION_SENSOR 3   // IR sensor
+#define TRIGGER_PIN 2     // Ultrasonic Sensor Trigger
+#define ECHO_PIN 4        // Ultrasonic Sensor Echo
+#define LED_IR 8     // LED for motion detection
+#define LED_DISTANCE 9   // LED for proximity detection
+#define LED_BRIGHTNESS 10 // LED for low light condition
+#define GAS_SENSOR_ANALOG A3  // MQ-7 Analog Output
+#define GAS_SENSOR_DIGITAL A0 // MQ-7 Digital Output
+
+// Sensor Object
+BH1750 lightSensor;
+
+// Flags for Interrupt Handling
+volatile bool isMotionDetected = false;
+volatile bool isObstacleDetected = false;
+
+// Sensor Thresholds
+#define LIGHT_LEVEL_THRESHOLD 1000 // Lux level to activate LED
+#define OBJECT_DISTANCE_LIMIT 15   // Distance (cm) to detect obstacle
+
+// Timer Flag
+volatile bool updateLightSensor = false;
+
+// Timer Interrupt Routine (Executes every 2 seconds)
+ISR(TIMER1_COMPA_vect) {
+  updateLightSensor = true;
+}
+
+// Motion Sensor Interrupt
+void motionSensorISR() {
+  isMotionDetected = digitalRead(MOTION_SENSOR);
+  delay(50); // Debounce delay
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  // Configure Motion Sensor
+  pinMode(MOTION_SENSOR, INPUT);
+  attachPCINT(digitalPinToPCINT(MOTION_SENSOR), motionSensorISR, CHANGE);
+
+  // Setup Ultrasonic Sensor
+  pinMode(TRIGGER_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // Configure LED Outputs
+  pinMode(LED_MOTION, OUTPUT);
+  pinMode(LED_DISTANCE, OUTPUT);
+  pinMode(LED_BRIGHTNESS, OUTPUT);
+
+  // Setup MQ-7 Gas Sensor
+  pinMode(GAS_SENSOR_ANALOG, INPUT);
+  pinMode(GAS_SENSOR_DIGITAL, INPUT);
+
+  // Initialize Light Sensor
+  Wire.begin();
+  lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE);
+  delay(200); // Sensor stabilization delay
+
+  // Setup Timer1 to trigger every 2 seconds
+  cli();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+  OCR1A = 31250;  // 2 seconds (16MHz clock, 1024 prescaler)
+  TCCR1B |= (1 << WGM12);
+  TCCR1B |= (1 << CS12) | (1 << CS10);
+  TIMSK1 |= (1 << OCIE1A);
+  sei();
+
+  Serial.println("System Initialized Successfully");
+}
+
+void loop() {
+  // Handle Motion Detection
+  digitalWrite(LED_MOTION, isMotionDetected);
+  if (isMotionDetected) {
+    Serial.println("Movement Detected!");
+  }
+
+  // Measure Distance with Ultrasonic Sensor
+  digitalWrite(TRIGGER_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN, LOW);
+
+  long signalDuration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
+  float distanceMeasured = signalDuration * 0.034 / 2; // Convert to cm
+
+  isObstacleDetected = (distanceMeasured > 0 && distanceMeasured < OBJECT_DISTANCE_LIMIT);
+  digitalWrite(LED_DISTANCE, isObstacleDetected);
+  if (isObstacleDetected) {
+    Serial.println("Object Nearby!");
+  }
+
+  // Read Light Sensor Value
+  float ambientLight = lightSensor.readLightLevel();
+  Serial.print("Ambient Light Level: ");
+  Serial.print(ambientLight);
+  Serial.println(" lx");
+
+  digitalWrite(LED_BRIGHTNESS, ambientLight > LIGHT_LEVEL_THRESHOLD);
+
+  // Read Gas Sensor Data
+  int coLevelAnalog = analogRead(GAS_SENSOR_ANALOG);
+  int coLevelDigital = digitalRead(GAS_SENSOR_DIGITAL);
+
+  Serial.print("CO Concentration (Analog): ");
+  Serial.println(coLevelAnalog);
+
+  if (coLevelAnalog > 305) {
+    Serial.println("Warning! High CO Levels Detected!");
+
+    // Flash LED for Alert
+    for (int i = 0; i < 5; i++) {
+      digitalWrite(LED_BRIGHTNESS, HIGH);
+      delay(300);
+      digitalWrite(LED_BRIGHTNESS, LOW);
+      delay(300);
+    }
+  }
+
+  delay(500); // Short delay for stability
+}
